@@ -4,14 +4,20 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "npm run build && lite-server",
-    "build": "browserify main.js -o build/bundle.js && copy \"index.html\" \"build/index.html\"",
-    "watch": "onchange index.html main.js -- npm run build"
+    "start": "npm run build && karma start",
+    "build": "echo 'start'",
+    "watch": "onchange index.html main.js test.html parser.spec.js -- npm run build"
   },
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "assert": "^1.4.1",
+    "jasmine": "^2.4.1",
+    "karma": "^1.1.1",
+    "karma-chrome-launcher": "^1.0.1",
+    "karma-jasmine": "^1.0.2",
+    "karma-phantomjs-launcher": "^1.0.1",
+    "karma-spec-reporter": "0.0.26",
     "onchange": "^2.5.0",
     "watch": "^0.19.1"
   }

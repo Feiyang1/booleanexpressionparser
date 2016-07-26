@@ -5,7 +5,6 @@
 //     operators : [">", "<", "!="]
 // }];
 
-var assert = require('assert');
 
 function print(node) {
     let str = "";
@@ -15,7 +14,7 @@ function print(node) {
     else {
         if (node.type === "OR")
             str += "(";
-        str += print(node.left);
+        str += print(node.left); 
         str += (" " + node.type + " ");
         str += print(node.right);
         if (node.type === "OR")
@@ -25,7 +24,7 @@ function print(node) {
 }
 
 function printFilter(filter) {
-    return filter.name + " " + filter.operator + " " + filter.value;
+    return filter.name + " " + filter.operator + " " + filter.values[0];
 }
 
 function tokenize(code) {
@@ -41,43 +40,26 @@ function tokenize(code) {
     return results;
 }
 
-assert.deepEqual(tokenize("123\n"), ["123"]);
-assert.deepEqual(tokenize("A > 10"), ["A", ">", "10"]);
-assert.deepEqual(tokenize("A_10_l()>10 AND (A<100 OR A!=1000  )"), ["A_10_l", "(", ")", ">", "10", "AND", "(", "A", "<", "100", "OR", "A", "!=", "1000", ")"]);
-assert.deepEqual(tokenize("   A   != 24 AND\n\n  pi"), ["A", "!=", "24", "AND", "pi"]);
-assert.deepEqual(tokenize("()"), ["(", ")"]);
-assert.deepEqual(tokenize("    "), []);
-
+// to be based on metadata
 function isNumber(token) {
     return token != null && token.match(/^-?[0-9]+$/) != null;
 }
 
+// to be based on metadata
 function isName(token) {
     return token != null && token.match(/^[A-Za-z]\w*$/) != null;
 }
 
+// to be based on metadata
 function isOperator(token) {
     return token != null && token.match(/^[^ \f\n\r\t\v\u00a0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeffA-Za-z0-9_]+$/) != null;
 }
 
-assert(isNumber("123"));
-assert(isNumber("-9213"));
-assert(!isNumber("-i1"));
-assert(!isNumber("123a"));
-assert(isName("abc_a"));
-assert(!isName("-123w"));
-assert(!isName("123"));
-assert(isOperator(">"));
-assert(isOperator("!="));
-assert(!isOperator("!=2"));
-assert(!isOperator("abc2"));
-assert(!isOperator("123"));
-
-function Filter(name, match, operator, value) {
+function Filter(name, operator, values, match) {
     this.name = name;
     this.match = match;
     this.operator = operator;
-    this.value = value;
+    this.values = values;
 }
 
 function parse(code) {
@@ -89,7 +71,6 @@ function parse(code) {
     }
 
     function consume(token) {
-        assert.strictEqual(token, tokens[position]);
         position++;
     }
 
@@ -119,7 +100,7 @@ function parse(code) {
             else {
                 throw new SyntaxError("expected Operator");
             }
-            filter = new Filter(filterName, operator, value); // a leaf node
+            filter = new Filter(filterName, operator, [value]); // a leaf node
         }
         else if (t === "(") {
             consume(t);
@@ -157,25 +138,3 @@ function parse(code) {
 
     return result;
 }
-
-
-let simpleExpression = `A > 10`;
-
-assert.deepEqual(parse(simpleExpression), {
-    name: "A",
-    operator: ">",
-    value: "10"
-});
-
-simpleExpression = `A > 10 AND A < 100`;
-assert.deepEqual(parse(simpleExpression), {
-    type: "AND",
-    left: { name: "A", operator: ">", value: "10" },
-    right: { name: "A", operator: "<", value: "100" }
-});
-
-simpleExpression = `A > 101 AND (A < 100 OR B != 0)`;
-let tree = parse(simpleExpression);
-assert.deepEqual(print(tree), simpleExpression);
-
-simpleExpression = `A [match ] > 101 AND (A < 100 OR B != 0)`;
