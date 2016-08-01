@@ -7,8 +7,9 @@ describe("Tokenizer", () => {
         expect(tokenize("   A   != 24 AND\n\n  pi")).toEqual(["A", "!=", "24", "AND", "pi"]);
         expect(tokenize("()")).toEqual(["(", ")"]);
         expect(tokenize("    ")).toEqual([]);
-        expect(tokenize(`"Market Value"`)).toEqual(["Market Value"]);
-        expect(tokenize(`"Market Value"[SLG]`)).toEqual(["Market Value", "[", "SLG", "]"])
+        expect(tokenize(`"Market Value"`)).toEqual([`Market Value`]);
+        expect(tokenize(`"   Market    Value "`)).toEqual([`Market Value`]);
+        expect(tokenize(`"Market Value"[SLG]`)).toEqual([`Market Value`, "[", "SLG", "]"])
     });
 });
 
@@ -20,6 +21,7 @@ describe("Token", () => {
         expect(!isNumber("-i1")).toBeTruthy();
         expect(!isNumber("123a")).toBeTruthy();
         expect(isName("abc_a")).toBeTruthy();
+        expect(isName("abc a")).toBeTruthy();
         expect(!isName("-123w")).toBeTruthy();
         expect(!isName("123")).toBeTruthy();
         expect(isOperator(">")).toBeTruthy();
@@ -57,7 +59,12 @@ describe("parser", () => {
 
     it("should parse between with AND condition", () => {
         let expr = `A between 10 and 100 AND B between 20 and 200`;
-        expect(parse(expr).toEqual({ type: "AND", left: new Filter("A", "between", ["10", "100"]), right: Filter("B", "between", ["20", "200"]) }));
+        expect(parse(expr)).toEqual({ type: "AND", left: new Filter("A", "between", ["10", "100"]), right: new Filter("B", "between", ["20", "200"]) });
+    });
+
+    it("should parse NOT BETWEEN operator", () => {
+        let expr = `A not between 10 and 100 AND B not between 20 and 200`;
+        expect(parse(expr)).toEqual({ type: "AND", left: new Filter("A", "not between", ["10", "100"]), right: new Filter("B", "not between", ["20", "200"]) });
     });
 
     it("should parse IN operator", () => {
@@ -65,20 +72,19 @@ describe("parser", () => {
         expect(parse(expr)).toEqual(new Filter("A", "in", ["C", "E", "F"]));
     });
 
-    it("should parse NOT BETWEEN operator", () => {
-
-    });
-
     it("should parse START WITH operator", () => {
-
+        let expr = `A START WITH "C"`;
+        expect(parse(expr)).toEqual(new Filter("A", "start with", ["C"]));
     });
 
     it("should parse BLANK operator", () => {
-
+        let expr = `A blank`;
+        expect(parse(expr)).toEqual(new Filter("A", "blank", []));
     });
 
     it("should parse NOT BLANK operator", () => {
-
+        let expr = `A not blank`;
+        expect(parse(expr)).toEqual(new Filter("A", "not blank", []));
     });
 
 });
