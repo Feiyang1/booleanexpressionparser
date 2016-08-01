@@ -30,7 +30,7 @@ function printFilter(filter) {
 function tokenize(code) {
     let results = [];
     //non space and none alphanumeric character(operators) - [^ \f\n\r\t\v\u00a0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeffA-Za-z0-9_]
-    let tokenRegExp = /\s*(".*"|[\(]|[\)]|\w+|[^ \f\n\r\t\v\u00a0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeffA-Za-z0-9_]+)\s*/g;
+    let tokenRegExp = /\s*("[^"]*"|[\(]|[\)]|\w+|[^ \f\n\r\t\v\u00a0\u1680\u180e\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeffA-Za-z0-9_]+)\s*/g;
     let m, token;
 
     while ((m = tokenRegExp.exec(code)) !== null) {
@@ -46,7 +46,11 @@ function tokenize(code) {
 
 // return applicable operators given a filtername
 function getApplicableOperators(filterName) {
-    return [">", "=", "<", "!=", "BETWEEN", "NOT BETWEEN", "STARTS WITH"];
+    return [">", "=", "<", "!=", "BETWEEN", "NOT BETWEEN", "STARTS WITH", "IN", "BLANK", "NOT BLANK"];
+}
+
+function getApplicableMatches(){
+    return ["ALL", "ANY", "SLG", "HH"];
 }
 
 function isQuoted(token) {
@@ -77,9 +81,10 @@ function Filter(name, operator, values, match) {
     this.values = values;
 }
 
-function parse(code) {
+function parse(code, isGroup) {
     let tokens = tokenize(code);
     let position = 0;
+    let _isGroup = isGroup;
 
     function peek() {
         return tokens[position];
@@ -99,7 +104,7 @@ function parse(code) {
      * applicableOperators: [">", "=", "BETWEEN", "NOT BETWEEN", "STARTS WITH" ....]
      */
     function parseOperator(applicableOperators) {
-        let operator, input;
+        let operator, input = "";
         let localApplicableOperators = applicableOperators, localOperator;
         let t = peek(), match = false;
         input = t;
@@ -128,6 +133,40 @@ function parse(code) {
         return operator;
     }
 
+    /**
+     * @param
+     * applicableMatches: ["SLG", "HH", "ANY", "ALL"]
+     */
+    function parseMatch(applicableMatches) {
+        let match, t = peek();
+
+        if (t === "[") {
+            consume(t);
+
+            t = peek();
+            if (applicableMatches.indexOf(t) > -1) {
+                match = t;
+                consume(t);
+
+                t = peek();
+                if (t === "]") {
+                    consume(t);
+                }
+                else {
+                    throw new SyntaxError("expected ] for match");
+                }
+            }
+            else {
+                throw new SyntaxError("unexpected match parameter");
+            }
+        }
+        else {
+            throw new SyntaxError("expected [ for match");
+        }
+
+        return match;
+    }
+
     function parseValues(operator) {
         let values = [];
         let t = peek();
@@ -148,21 +187,33 @@ function parse(code) {
                             values.push(t);
                             consume(t);
                         }
-                        else{
+                        else {
                             throw new SyntaxError("expected Number");
                         }
                     }
                     else {
                         throw new SyntaxError("expected AND after BETWEEN/NOT BETWEEN");
                     }
-
                 }
                 else {
                     throw new SyntaxError("expected Number");
                 }
                 break;
             case "IN":
-                break
+                if (t === "(") {
+                    consume(t);
+                    values = parseGroupValues();
+
+                    t = peek();
+                    if (t !== ")") {
+                        throw new SyntaxError("expected ) for grouped values");
+                    }
+                    consume(t);
+                }
+                break;
+            case "BLANK":
+            case "NOT BLANK": //no values
+                break;
             default:
                 values.push(t);
                 consume(t);
@@ -171,27 +222,61 @@ function parse(code) {
         return values;
     }
 
+    /**
+     * 123,"abv","sdf",234
+     */
+    function parseGroupValues() {
+        let values = [], t;
+        t = peek();
+        if (isName(t) || isNumber(t)) {
+            consume(t);
+            values.push(t);
+
+            t = peek();
+            while (t === ",") {
+                consume(t);
+
+                t = peek();
+                if (isName(t) || isNumber(t)) {
+                    values.push(t);
+                    consume(t);
+                }
+
+                t = peek();
+            }
+        }
+        return values;
+    }
+
     function parseFilterExpr() {
         let t = peek();
-        let filter, filterName, operator, values = [];
+        let filter, filterName, operator, values = [], match;
         if (isName(t)) {
             consume(t)
             filterName = t;
+
             let applicableOperators = getApplicableOperators(filterName);
-            operator = parseOperator(applicableOperators);
-
-            if (operator) {
-                values = parseValues(operator);
-            }
-            else {
-                throw new SyntaxError("unexpected Operator");
+            if (_isGroup) {
+                match = parseMatch(getApplicableMatches());
             }
 
-            filter = new Filter(filterName, operator, values); // a leaf node
+            if (!_isGroup || (_isGroup && match)) {
+                operator = parseOperator(applicableOperators);
+
+                if (operator) {
+                    values = parseValues(operator);
+                }
+                else {
+                    throw new SyntaxError("unexpected Operator ");
+                }
+            }
+
+
+            filter = new Filter(filterName, operator, values, match); // a leaf node
         }
         else if (t === "(") {
             consume(t);
-            filter = parseExpr();
+            filter = parseExpr(); // returns an internal node
 
             t = peek();
             if (t !== ")") {
@@ -203,13 +288,27 @@ function parse(code) {
         return filter;
     }
 
-    function parseExpr() {
+    function parseAndExpr(){
         let expr = parseFilterExpr();
         let t = peek();
 
-        while (t === "AND" || t === "OR") {
+        while( t && t.toUpperCase() === "AND"){
             consume(t);
             let rhs = parseFilterExpr();
+            expr = {type: t, left: expr, right: rhs};
+            t = peek();
+        }
+
+        return expr;
+    }
+
+    function parseExpr() {
+        let expr = parseAndExpr();
+        let t = peek();
+
+        while (t && t.toUpperCase() === "OR") {
+            consume(t);
+            let rhs = parseAndExpr();
             expr = { type: t, left: expr, right: rhs };
             t = peek();
         }
